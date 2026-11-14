@@ -163,7 +163,7 @@ uv run --python 3.13 --extra llm skillevaluator rubric-eval \
   -r cli -r json -o reports/first-build
 ```
 
-The command sends skill documentation to the model and saves feedback in
+It sends documentation to the model, saving feedback in
 `reports/first-build/skillevaluator-rubric.json`. No agent runtime or Docker is
 needed. Completed evaluations can still fail rubric thresholds.
 
@@ -237,7 +237,7 @@ Cite the paper and record the SkillEvaluator release or commit; see [CITATION.cf
 
 ## Documentation
 
-See [the documentation](https://docs.nvidia.com/skills/skillevaluator/) for
+[Documentation](https://docs.nvidia.com/skills/skillevaluator/) covers
 setup, tier guides, reports, CI integration, CLI reference, and
 [performance dashboard](docs/reports.mdx#performance-dashboard).
 
