@@ -6,6 +6,9 @@ All notable changes to SkillEvaluator are documented in this file.
 
 ### Added
 
+- `SKILL_EVAL_LLM_EXTRA_HEADERS`: JSON object of extra headers for the
+  `openai-compatible` chat client, with a `{uuid}` placeholder, so gateways
+  that require a session header (such as OpenCode Go) accept evaluator calls.
 - Dataset-first Tier 3 walkthrough: prepare and review cases before an explicit
   live evaluation, with a short dataset guide and concise run-settings page.
   Tier 1 and Tier 2 now have short first-run paths; detailed checks, policies,

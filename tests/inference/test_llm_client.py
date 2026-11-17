@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import re
 import threading
 from pathlib import Path
 from types import SimpleNamespace
@@ -83,6 +84,47 @@ class TestLLMClientInit:
         assert client.model == "custom/model"
         assert client.base_url == "https://custom.api"
         assert client.api_key == "key123"
+
+
+class TestExtraHeaders:
+    def _setup(self, monkeypatch: pytest.MonkeyPatch, provider: str = "openai-compatible") -> None:
+        monkeypatch.setenv("SKILL_EVAL_LLM_PROVIDER", provider)
+        monkeypatch.setenv("SKILL_EVAL_LLM_BASE_URL", "https://gateway.example.com/v1")
+        monkeypatch.setenv("SKILL_EVAL_LLM_API_KEY", "test-key")
+        monkeypatch.setenv("NVIDIA_API_KEY", "test-key")
+
+    def test_openai_compatible_sends_headers_with_session_uuid(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._setup(monkeypatch)
+        monkeypatch.setenv("SKILL_EVAL_LLM_EXTRA_HEADERS", '{"x-opencode-session": "{uuid}", "x-team": "evals"}')
+        with patch("openai.OpenAI", return_value=MagicMock()) as mock_cls:
+            LLMClient()._get_client()
+        headers = mock_cls.call_args.kwargs["default_headers"]
+        assert headers["x-team"] == "evals"
+        assert re.fullmatch(
+            r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}", headers["x-opencode-session"]
+        )
+
+    def test_unset_adds_no_default_headers(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._setup(monkeypatch)
+        monkeypatch.delenv("SKILL_EVAL_LLM_EXTRA_HEADERS", raising=False)
+        with patch("openai.OpenAI", return_value=MagicMock()) as mock_cls:
+            LLMClient()._get_client()
+        assert "default_headers" not in mock_cls.call_args.kwargs
+
+    def test_native_provider_ignores_headers(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("SKILL_EVAL_LLM_PROVIDER", "nv_build")
+        monkeypatch.setenv("NVIDIA_API_KEY", "test-key")
+        monkeypatch.setenv("SKILL_EVAL_LLM_EXTRA_HEADERS", '{"x-leak": "1"}')
+        with patch("openai.OpenAI", return_value=MagicMock()) as mock_cls:
+            LLMClient()._get_client()
+        assert "default_headers" not in mock_cls.call_args.kwargs
+
+    @pytest.mark.parametrize("raw", ["not json", "[1]", '{"a": 1}', '{"": "x"}'])
+    def test_invalid_value_raises(self, monkeypatch: pytest.MonkeyPatch, raw: str) -> None:
+        self._setup(monkeypatch)
+        monkeypatch.setenv("SKILL_EVAL_LLM_EXTRA_HEADERS", raw)
+        with patch("openai.OpenAI", return_value=MagicMock()), pytest.raises(LLMClientError, match="EXTRA_HEADERS"):
+            LLMClient()._get_client()
 
 
 class TestLLMClientGetClient:

@@ -24,6 +24,7 @@ import os
 import re
 import threading
 import urllib.error
+import uuid
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 from typing import Any, NamedTuple
@@ -65,6 +66,33 @@ logger = get_logger(__name__)
 
 _NATIVE_OPENAI_AUTHORITIES = frozenset({"api.openai.com", "api.openai.com:443"})
 _NATIVE_OPENAI_PATHS = frozenset({"/v1", "/v1/"})
+
+
+EXTRA_HEADERS_ENV = "SKILL_EVAL_LLM_EXTRA_HEADERS"
+_SESSION_PLACEHOLDER = "{uuid}"
+
+
+def _extra_headers_from_env(environ: Mapping[str, str] | None = None) -> dict[str, str]:
+    """Parse ``SKILL_EVAL_LLM_EXTRA_HEADERS`` into request headers.
+
+    The value is a JSON object of header names to string values. The literal
+    ``{uuid}`` inside a value is replaced with one random UUID shared by every
+    header of the call, so gateways that route by session can receive a stable
+    per-client identifier. Invalid input raises ``LLMClientError``.
+    """
+    raw = (environ if environ is not None else os.environ).get(EXTRA_HEADERS_ENV, "").strip()
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise LLMClientError(f"{EXTRA_HEADERS_ENV} must be a JSON object of header names to strings.") from exc
+    if not isinstance(parsed, dict) or not all(
+        isinstance(name, str) and name.strip() and isinstance(value, str) for name, value in parsed.items()
+    ):
+        raise LLMClientError(f"{EXTRA_HEADERS_ENV} must be a JSON object of header names to strings.")
+    session_id = str(uuid.uuid4())
+    return {name: value.replace(_SESSION_PLACEHOLDER, session_id) for name, value in parsed.items()}
 
 
 def _effective_openai_base_url(explicit_base_url: str | None) -> str:
@@ -659,6 +687,10 @@ class LLMClient:
             "base_url": config.base_url,
             "max_retries": 0,
         }
+        if config.provider == "openai-compatible":
+            extra_headers = _extra_headers_from_env()
+            if extra_headers:
+                client_kwargs["default_headers"] = extra_headers
         if self._http_client is not None:
             client_kwargs["http_client"] = self._http_client
         if self._timeout is not None:
